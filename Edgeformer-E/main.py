@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description='Study for Edge Text-Rich Networks.
 parser.add_argument("--mode", type=str, default="train", choices=['train', 'test'])
 parser.add_argument("--data_path", type=str, default="Apps/")
 # parser.add_argument("--model_dir", type=str, default='ckpt/', choices=['ckpt/', 'ckpt-test/'])  # path to save
-parser.add_argument("--data_mode", default="bert", type=str, choices=['bert'])
+parser.add_argument("--data_mode", default="bert-base-chinese", type=str, choices=['bert-base-chinese'])
 parser.add_argument("--pretrain_embed", type=str2bool, default=False) # use pretrain node embedding or not
 parser.add_argument("--pretrain_dir", default="movie/pretrain", type=str, choices=['movie/pretrain']) # pretrain node embedding dir
 parser.add_argument("--pretrain_mode", default="MF", type=str, choices=['MF','BERTMF']) # pretrain node embedding dir
@@ -44,7 +44,7 @@ parser.add_argument("--adam_epsilon", type=float, default=1e-8)
 parser.add_argument("--enable_gpu", type=str2bool, default=True)
 
 # load checkpoint or test
-parser.add_argument("--model_name_or_path", default="bert-base-uncased", type=str,
+parser.add_argument("--model_name_or_path", default="bert-base-chinese", type=str,
                     help="Path to pre-trained model or shortcut name. ")
 parser.add_argument(
         "--load_ckpt_name",
@@ -64,7 +64,7 @@ args = parser.parse_args()
 #     raise ValueError('stop')
 
 # model data mode
-assert args.data_mode == 'bert'
+assert args.data_mode == 'bert-base-chinese'
 
 if args.local_rank in [-1,0]:
     logging.info(args)

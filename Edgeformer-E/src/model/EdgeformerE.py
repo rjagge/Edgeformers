@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.modeling_bert import BertSelfAttention, BertLayer, BertEmbeddings, BertPreTrainedModel
+from transformers.models.bert.modeling_bert import BertSelfAttention, BertLayer, BertEmbeddings, BertPreTrainedModel
 
 from src.utils import roc_auc_score, mrr_score, ndcg_score
 
@@ -113,6 +113,7 @@ class EdgeFormersE(BertPreTrainedModel):
 
         # obtain embedding
         embedding_output = self.embeddings(input_ids=input_ids)
+        # print(self.node_embedding.size(), query_node_idx)
         query_node_embed = self.node_to_text_transform(self.node_embedding[query_node_idx])
         key_node_embed = self.node_to_text_transform(self.node_embedding[key_node_idx])
 

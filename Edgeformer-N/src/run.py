@@ -59,7 +59,7 @@ def train(args):
 
     # Load data
     # define tokenizer 
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
     # load sampling statistics
     args.user_pos_neighbour, args.user_neg_neighbour, args.item_pos_neighbour, args.item_neg_neighbour = pickle.load(open(os.path.join(args.data_path,'neighbor_sampling.pkl'),'rb'))
 
@@ -222,7 +222,7 @@ def validate(args, model, dataloader):
 def test(args):
 
     # define tokenizer
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
     # load sampling statistics
     args.user_pos_neighbour, args.user_neg_neighbour, args.item_pos_neighbour, args.item_neg_neighbour = pickle.load(open(os.path.join(args.data_path,'neighbor_sampling.pkl'),'rb'))
 
@@ -259,7 +259,7 @@ def infer(args):
 
     # Load data
     # define tokenizer 
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
     # load sampling statistics
     args.user_pos_neighbour, args.user_neg_neighbour, args.item_pos_neighbour, args.item_neg_neighbour = pickle.load(open(os.path.join(args.data_path,'neighbor_sampling.pkl'),'rb'))
 

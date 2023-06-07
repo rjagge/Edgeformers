@@ -61,10 +61,10 @@ def train(args):
 
     # Load data
     # define tokenizer 
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
 
     # load dataset
-    if args.data_mode in ['bert']:
+    if args.data_mode in ['bert-base-chinese']:
         args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
         train_set = load_dataset_bert(args, tokenizer, evaluate=False, test=False)
         val_set = load_dataset_bert(args, tokenizer, evaluate=True, test=False)
@@ -235,10 +235,10 @@ def validate(args, model, dataloader):
 def test(args):
 
     # define tokenizer
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
 
     # load dataset
-    if args.data_mode in ['bert']:
+    if args.data_mode in ['bert-base-chinese']:
         args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
         test_set = load_dataset_bert(args, tokenizer, evaluate=True, test=True)
     else:

@@ -43,7 +43,7 @@ parser.add_argument("--adam_epsilon", type=float, default=1e-8)
 parser.add_argument("--enable_gpu", type=str2bool, default=True)
 
 # load checkpoint or test
-parser.add_argument("--model_name_or_path", default="bert-base-uncased", type=str,
+parser.add_argument("--model_name_or_path", default="bert-base-chinese", type=str,
                     help="Path to pre-trained model or shortcut name. ")
 parser.add_argument(
         "--load_ckpt_name",

@@ -19,7 +19,7 @@ def load_dataset_bert(args, tokenizer, evaluate=False, test=False):
     '''
     features : (token_query_and_neighbors, attention_query_and_neighbors, mask_query_and_neighbors), (token_key_and_neighbors, attention_key_and_neighbors, mask_key_and_neighbors)
     '''
-    assert args.data_mode in ['bert']
+    assert args.data_mode in ['bert-base-chinese']
 
     # block for processes which are not the core process
     if args.local_rank not in [-1, 0]:
@@ -89,8 +89,10 @@ def read_process_data_bert(dir, tokenizer, max_length):
             a = line.strip().split('\$\$')
             if len(a) == 4:
                 text, query_n, key_n, label = a
+                # 做一个脏补丁
+                label = label.strip('"')
             else:
-                print(len(a))
+                print(line)
                 raise ValueError('stop')
 
             encoded_text = tokenizer.batch_encode_plus([text], max_length=max_length, padding='max_length', truncation=True)
