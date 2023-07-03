@@ -3,16 +3,16 @@ import logging
 import argparse
 from pathlib import Path
 
-from src.run import train, test
+from src.run import train, test, get_node_emd
 from src.utils import setuplogging, str2bool, set_seed
 
 parser = argparse.ArgumentParser(description='Study for Edge Text-Rich Networks.')
-parser.add_argument("--mode", type=str, default="train", choices=['train', 'test'])
+parser.add_argument("--mode", type=str, default="train", choices=['train', 'test','get_node_emd'])
 parser.add_argument("--data_path", type=str, default="Apps/")
 # parser.add_argument("--model_dir", type=str, default='ckpt/', choices=['ckpt/', 'ckpt-test/'])  # path to save
 parser.add_argument("--data_mode", default="bert-base-chinese", type=str, choices=['bert-base-chinese'])
 parser.add_argument("--pretrain_embed", type=str2bool, default=False) # use pretrain node embedding or not
-parser.add_argument("--pretrain_dir", default="movie/pretrain", type=str, choices=['movie/pretrain']) # pretrain node embedding dir
+parser.add_argument("--pretrain_dir", default="movie/pretrain", type=str) # pretrain node embedding dir
 parser.add_argument("--pretrain_mode", default="MF", type=str, choices=['MF','BERTMF']) # pretrain node embedding dir
 
 # turing
@@ -90,3 +90,7 @@ if __name__ == "__main__":
         ################## You should use single GPU for testing. ####################
         assert args.local_rank == -1
         test(args)
+
+    if args.mode == 'get_node_emd':
+        print('-------------get_node_emd--------------')
+        get_node_emd(args)

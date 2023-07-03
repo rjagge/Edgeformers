@@ -42,6 +42,8 @@ class EdgeFormerEncoderE(nn.Module):
                 ################### You may add edge-type specific transfer here on input_embed. ######################
 
                 # update the station in the query/key
+                # N 2+L D
+                # 相当于是说，hidden里面的前两个节点是query和key的embedding，然后跟上text的token embedding进入到transformer
                 hidden_states[:, 0] = query_embedding
                 hidden_states[:, 1] = key_embedding
 
@@ -97,9 +99,15 @@ class EdgeFormersE(BertPreTrainedModel):
                 with torch.no_grad():
                     self.node_to_text_transform.weight.copy_(checkpoint['linear.weight'])
                     self.node_to_text_transform.bias.copy_(checkpoint['linear.bias'])
+            # 这个模型暂时用来当作bert+node的baseline
+            # 使用这个模型时需要设置 pretrain_embed == True and pretrain_mode == 'MF' and pretrain_dir = '/root/collaborator_rec/baselines/'
             elif pretrain_mode == 'MF':
-                checkpoint = torch.load(os.path.join(pretrain_dir, f'MF_{heter_embed_size}.pt'), map_location='cpu')
-                self.node_embedding = nn.Parameter(checkpoint['node_embedding'])
+                # checkpoint = torch.load(os.path.join(pretrain_dir, f'MF_{heter_embed_size}.pt'), map_location='cpu')
+                # self.node_embedding = nn.Parameter(checkpoint['node_embedding'])
+                checkpoint = torch.load(os.path.join(pretrain_dir, f'node_embedding.pt'),map_location='cpu')
+                self.node_embedding = nn.Parameter(checkpoint)
+                # 固定这个node_embedding的参数
+                self.node_embedding.requires_grad = False
                 self.node_to_text_transform = nn.Linear(self.heter_embed_size, self.hidden_size)
             else:
                 raise ValueError('Wrong pretrain mode!')

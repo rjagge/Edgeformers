@@ -152,7 +152,7 @@ def train(args):
 
         ## start validating
         if args.local_rank in [-1, 0]:
-            ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-epoch-{}.pt'.format(args.model_type, args.pretrain_LM, args.lr, args.heter_embed_size, ep + 1))
+            ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-epoch-{}.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size, ep + 1))
             torch.save(model.state_dict(), ckpt_path)
             logging.info(f"Model saved to {ckpt_path}")
 
@@ -161,7 +161,7 @@ def train(args):
 
             logging.info("validation time:{}".format(time() - start_time))
             if acc > best_acc:
-                ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_LM, args.lr, args.heter_embed_size))
+                ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
                 torch.save(model.state_dict(), ckpt_path)
                 logging.info(f"Model saved to {ckpt_path}")
                 best_acc = acc
@@ -170,7 +170,7 @@ def train(args):
                 best_count += 1
                 if best_count >= args.early_stop:
                     start_time = time()
-                    ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_LM, args.lr, args.heter_embed_size))
+                    ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
                     model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
                     logging.info("Start testing for best")
                     acc = validate(args, model, test_loader)
@@ -185,7 +185,7 @@ def train(args):
     if args.local_rank in [-1, 0]:
         start_time = time()
         # load checkpoint
-        ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_LM, args.lr, args.heter_embed_size))
+        ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
         model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
         logging.info('load ckpt:{}'.format(ckpt_path))
         acc = validate(args, model, test_loader)
@@ -263,3 +263,29 @@ def test(args):
     # test
     validate(args, model, test_loader)
     logging.info("test time:{}".format(time() - start_time))
+
+def get_node_emd(args):
+    
+    # define tokenizer
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
+
+    # load dataset
+    if args.data_mode in ['bert-base-chinese']:
+        args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
+    else:
+        raise ValueError('Data Mode is Incorrect here!')
+
+    # define model
+    model = load_bert(args)
+    logging.info('loading model: {}'.format(args.model_type))
+
+    # load checkpoint
+    start_time = time()
+    checkpoint = torch.load(args.load_ckpt_name, map_location="cpu")
+    model.load_state_dict(checkpoint)
+    # model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+    logging.info('load ckpt:{}'.format(args.load_ckpt_name))
+
+    # 保存 Tensor
+    torch.save(model.bert.node_embedding.detach(), 'node_embedding.pt')
+
