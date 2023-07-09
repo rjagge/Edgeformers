@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data.distributed import DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 
 from src.utils import setuplogging
 from src.data_heter import load_dataset_text
@@ -122,6 +123,8 @@ def train(args):
         start_time = time()
         ddp_model.train() ######################## You should motify it to ddp_model.train when using DDP
         train_loader_iterator = tqdm(train_loader, desc=f"Epoch:{ep}|Iteration", disable=args.local_rank not in [-1,0])
+        # 在训练开始之前创建一个SummaryWriter对象
+        writer = SummaryWriter(log_dir=args.data_path+'/log')  # 指定一个目录来保存日志文件
         for step, batch in enumerate(train_loader_iterator):
             # put data into GPU
             if args.enable_gpu:
@@ -144,6 +147,7 @@ def train(args):
                         'cost_time:{} step:{}, lr:{}, train_loss: {:.5f}'.format(
                             time() - start_time, global_step, optimizer.param_groups[0]['lr'],
                             loss / args.log_steps))
+                    writer.add_scalar('Loss/train', loss / args.log_steps, global_step)  # log loss for tensorboard
                     loss = 0.0
                 if args.local_rank == 0:
                     torch.distributed.barrier()

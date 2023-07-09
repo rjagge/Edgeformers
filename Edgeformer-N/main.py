@@ -32,7 +32,7 @@ parser.add_argument("--local_rank", type=int, default=-1)
 
 # model training (these parameters can be fixed)
 parser.add_argument("--lr", type=float, default=1e-5)
-parser.add_argument("--epochs", type=int, default=100) # 12 for running with scheduler
+parser.add_argument("--epochs", type=int, default=10) # 12 for running with scheduler
 parser.add_argument("--early_stop", type=int, default=3)
 parser.add_argument("--log_steps", type=int, default=100)
 parser.add_argument("--random_seed", type=int, default=42)
