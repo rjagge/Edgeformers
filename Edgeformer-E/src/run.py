@@ -4,10 +4,11 @@ import pickle
 import random
 from time import time
 from collections import defaultdict
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 from tqdm import tqdm
 import numpy as np
+import pandas as pd
 import torch
 import torch.distributed as dist
 import torch.optim as optim
@@ -17,15 +18,24 @@ from torch.utils.data.distributed import DistributedSampler
 
 from src.utils import setuplogging
 from src.data_bert import load_dataset_bert
-from transformers import BertConfig, BertTokenizerFast, AdamW, get_linear_schedule_with_warmup
+from transformers import (
+    BertConfig,
+    BertTokenizerFast,
+    AdamW,
+    get_linear_schedule_with_warmup,
+)
 
 from transformers import BertModel
+
 
 def cleanup():
     dist.destroy_process_group()
 
+
 def load_bert(args):
-    config = BertConfig.from_pretrained(args.model_name_or_path, output_hidden_states=True)
+    config = BertConfig.from_pretrained(
+        args.model_name_or_path, output_hidden_states=True
+    )
     config.heter_embed_size = args.heter_embed_size
     config.node_num = args.user_num + args.item_num
     config.class_num = args.class_num
@@ -33,20 +43,32 @@ def load_bert(args):
     args.node_num = args.user_num + args.item_num
     if args.model_type == 'EdgeformerE':
         from src.model.EdgeformerE import EdgeFormersForEdgeClassification
-        model = EdgeFormersForEdgeClassification.from_pretrained(args.model_name_or_path, config=config) if args.pretrain_LM else EdgeFormersForEdgeClassification(config)
-        model.node_num, model.edge_type, model.heter_embed_size = args.user_num + args.item_num, args.class_num, args.heter_embed_size
-        model.init_node_embed(args.pretrain_embed, args.pretrain_mode, args.pretrain_dir)
+
+        model = (
+            EdgeFormersForEdgeClassification.from_pretrained(
+                args.model_name_or_path, config=config
+            )
+            if args.pretrain_LM
+            else EdgeFormersForEdgeClassification(config)
+        )
+        model.node_num, model.edge_type, model.heter_embed_size = (
+            args.user_num + args.item_num,
+            args.class_num,
+            args.heter_embed_size,
+        )
+        model.init_node_embed(
+            args.pretrain_embed, args.pretrain_mode, args.pretrain_dir
+        )
     else:
         raise ValueError('Input Model Name is Incorrect!')
 
     return model
 
-def train(args):
 
+def train(args):
     # Setup CUDA, GPU & distributed training
     if args.local_rank == -1:
-        device = torch.device(
-            "cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # config.n_gpu = torch.cuda.device_count()
         args.n_gpu = 1
     else:
@@ -56,16 +78,23 @@ def train(args):
         torch.distributed.init_process_group(backend='nccl')
         args.n_gpu = 1
     args.device = device
-    logging.warning("Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
-                    args.local_rank, device, args.n_gpu, bool(args.local_rank != -1))
+    logging.warning(
+        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
+        args.local_rank,
+        device,
+        args.n_gpu,
+        bool(args.local_rank != -1),
+    )
 
     # Load data
-    # define tokenizer 
+    # define tokenizer
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
 
     # load dataset
     if args.data_mode in ['bert-base-chinese']:
-        args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
+        args.user_num, args.item_num, args.class_num = pickle.load(
+            open(os.path.join(args.data_path, 'node_num.pkl'), 'rb')
+        )
         train_set = load_dataset_bert(args, tokenizer, evaluate=False, test=False)
         val_set = load_dataset_bert(args, tokenizer, evaluate=True, test=False)
         test_set = load_dataset_bert(args, tokenizer, evaluate=True, test=True)
@@ -73,13 +102,31 @@ def train(args):
         raise ValueError('Data Mode is Incorrect here!')
 
     # define dataloader
-    train_sampler = RandomSampler(train_set) if args.local_rank == -1 else DistributedSampler(train_set)
-    val_sampler = SequentialSampler(val_set) if args.local_rank == -1 else DistributedSampler(val_set)
-    test_sampler = SequentialSampler(test_set) if args.local_rank == -1 else DistributedSampler(test_set)
+    train_sampler = (
+        RandomSampler(train_set)
+        if args.local_rank == -1
+        else DistributedSampler(train_set)
+    )
+    val_sampler = (
+        SequentialSampler(val_set)
+        if args.local_rank == -1
+        else DistributedSampler(val_set)
+    )
+    test_sampler = (
+        SequentialSampler(test_set)
+        if args.local_rank == -1
+        else DistributedSampler(test_set)
+    )
 
-    train_loader = DataLoader(train_set, batch_size=args.train_batch_size, sampler=train_sampler)
-    val_loader = DataLoader(val_set, batch_size=args.val_batch_size, sampler=val_sampler)
-    test_loader = DataLoader(test_set, batch_size=args.test_batch_size, sampler=test_sampler)
+    train_loader = DataLoader(
+        train_set, batch_size=args.train_batch_size, sampler=train_sampler
+    )
+    val_loader = DataLoader(
+        val_set, batch_size=args.val_batch_size, sampler=val_sampler
+    )
+    test_loader = DataLoader(
+        test_set, batch_size=args.test_batch_size, sampler=test_sampler
+    )
     print(f'[Process:{args.local_rank}] Dataset Loading Over!')
 
     # define model
@@ -94,7 +141,12 @@ def train(args):
 
     # define DDP here
     if args.local_rank != -1:
-        ddp_model = DDP(model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True)
+        ddp_model = DDP(
+            model,
+            device_ids=[args.local_rank],
+            output_device=args.local_rank,
+            find_unused_parameters=True,
+        )
     else:
         ddp_model = model
 
@@ -102,17 +154,29 @@ def train(args):
     ###################### You should think more here about the weight_decay and adam_epsilon ##################
     no_decay = ['bias', 'LayerNorm.weight']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters()
-                    if not any(nd in n for nd in no_decay)], 'weight_decay': args.weight_decay},
-        {'params': [p for n, p in model.named_parameters()
-                    if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {
+            'params': [
+                p
+                for n, p in model.named_parameters()
+                if not any(nd in n for nd in no_decay)
+            ],
+            'weight_decay': args.weight_decay,
+        },
+        {
+            'params': [
+                p
+                for n, p in model.named_parameters()
+                if any(nd in n for nd in no_decay)
+            ],
+            'weight_decay': 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.lr, eps=args.adam_epsilon)
     # optimizer = optim.Adam([{'params': ddp_model.parameters(), 'lr': args.lr}])
     # t_total = len(train_loader) * args.epochs // (args.train_batch_size) ################### be careful, no DDP here!!! ###################
     # scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=t_total)
 
-    #train
+    # train
     loss = 0.0
     global_step = 0
     best_acc, best_count = 0.0, 0
@@ -120,8 +184,12 @@ def train(args):
     for ep in range(args.epochs):
         ## start training
         start_time = time()
-        ddp_model.train() ######################## You should motify it to ddp_model.train when using DDP
-        train_loader_iterator = tqdm(train_loader, desc=f"Epoch:{ep}|Iteration", disable=args.local_rank not in [-1,0])
+        ddp_model.train()  ######################## You should motify it to ddp_model.train when using DDP
+        train_loader_iterator = tqdm(
+            train_loader,
+            desc=f"Epoch:{ep}|Iteration",
+            disable=args.local_rank not in [-1, 0],
+        )
         for step, batch in enumerate(train_loader_iterator):
             # put data into GPU
             if args.enable_gpu:
@@ -142,8 +210,12 @@ def train(args):
                 if global_step % args.log_steps == 0:
                     logging.info(
                         'cost_time:{} step:{}, lr:{}, train_loss: {:.5f}'.format(
-                            time() - start_time, global_step, optimizer.param_groups[0]['lr'],
-                            loss / args.log_steps))
+                            time() - start_time,
+                            global_step,
+                            optimizer.param_groups[0]['lr'],
+                            loss / args.log_steps,
+                        )
+                    )
                     loss = 0.0
                 if args.local_rank == 0:
                     torch.distributed.barrier()
@@ -152,7 +224,18 @@ def train(args):
 
         ## start validating
         if args.local_rank in [-1, 0]:
-            ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-epoch-{}.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size, ep + 1))
+            ckpt_path = os.path.join(
+                args.data_path,
+                'ckpt',
+                '{}-{}-{}-{}-{}-epoch-{}.pt'.format(
+                    args.model_type,
+                    args.pretrain_embed,
+                    args.pretrain_LM,
+                    args.lr,
+                    args.heter_embed_size,
+                    ep + 1,
+                ),
+            )
             torch.save(model.state_dict(), ckpt_path)
             logging.info(f"Model saved to {ckpt_path}")
 
@@ -161,7 +244,17 @@ def train(args):
 
             logging.info("validation time:{}".format(time() - start_time))
             if acc > best_acc:
-                ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
+                ckpt_path = os.path.join(
+                    args.data_path,
+                    'ckpt',
+                    '{}-{}-{}-{}-{}-best.pt'.format(
+                        args.model_type,
+                        args.pretrain_embed,
+                        args.pretrain_LM,
+                        args.lr,
+                        args.heter_embed_size,
+                    ),
+                )
                 torch.save(model.state_dict(), ckpt_path)
                 logging.info(f"Model saved to {ckpt_path}")
                 best_acc = acc
@@ -170,7 +263,17 @@ def train(args):
                 best_count += 1
                 if best_count >= args.early_stop:
                     start_time = time()
-                    ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
+                    ckpt_path = os.path.join(
+                        args.data_path,
+                        'ckpt',
+                        '{}-{}-{}-{}-{}-best.pt'.format(
+                            args.model_type,
+                            args.pretrain_embed,
+                            args.pretrain_LM,
+                            args.lr,
+                            args.heter_embed_size,
+                        ),
+                    )
                     model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
                     logging.info("Start testing for best")
                     acc = validate(args, model, test_loader)
@@ -185,7 +288,17 @@ def train(args):
     if args.local_rank in [-1, 0]:
         start_time = time()
         # load checkpoint
-        ckpt_path = os.path.join(args.data_path, 'ckpt', '{}-{}-{}-{}-{}-best.pt'.format(args.model_type, args.pretrain_embed, args.pretrain_LM, args.lr, args.heter_embed_size))
+        ckpt_path = os.path.join(
+            args.data_path,
+            'ckpt',
+            '{}-{}-{}-{}-{}-best.pt'.format(
+                args.model_type,
+                args.pretrain_embed,
+                args.pretrain_LM,
+                args.lr,
+                args.heter_embed_size,
+            ),
+        )
         model.load_state_dict(torch.load(ckpt_path, map_location="cpu"))
         logging.info('load ckpt:{}'.format(ckpt_path))
         acc = validate(args, model, test_loader)
@@ -206,7 +319,7 @@ def validate(args, model, dataloader):
     metrics_total = defaultdict(float)
     for step, batch in enumerate(tqdm(dataloader)):
         if args.enable_gpu:
-                batch = [b.cuda() for b in batch]
+            batch = [b.cuda() for b in batch]
 
         score, label = model.test(*batch)
         pred = torch.argmax(score, 1)
@@ -216,36 +329,71 @@ def validate(args, model, dataloader):
             labels = np.copy(label.cpu())
             scores = np.copy(score.cpu())
         else:
-            preds = np.concatenate((preds,pred.cpu()),0)
-            labels = np.concatenate((labels,label.cpu()),0)
-            scores = np.concatenate((scores,score.cpu()),0)
+            preds = np.concatenate((preds, pred.cpu()), 0)
+            labels = np.concatenate((labels, label.cpu()), 0)
+            scores = np.concatenate((scores, score.cpu()), 0)
 
-    # calculate F1 score
+    # calculate precision, recall and F1 score
+    metrics_total['precision_macro'] = precision_score(labels, preds, average='macro')
+    metrics_total['precision_weighted'] = precision_score(labels, preds, average='weighted')
+    metrics_total['recall_macro'] = recall_score(labels, preds, average='macro')
+    metrics_total['recall_weighted'] = recall_score(labels, preds, average='weighted')
     metrics_total['F1_macro'] = f1_score(labels, preds, average='macro')
-    metrics_total['F1_micro'] = f1_score(labels, preds, average='micro')
+    metrics_total['F1_weighted'] = f1_score(labels, preds, average='weighted')
     metrics_total['main'] = metrics_total['F1_macro']
 
-    logging.info("{}:{}".format('main', metrics_total['main']))
+    logging.info("{}:{}".format('precision_macro', metrics_total['precision_macro']))
+    logging.info("{}:{}".format('precision_weighted', metrics_total['precision_weighted']))
+    logging.info("{}:{}".format('recall_macro', metrics_total['recall_macro']))
+    logging.info("{}:{}".format('recall_weighted', metrics_total['recall_weighted']))
     logging.info("{}:{}".format('F1_macro', metrics_total['F1_macro']))
-    logging.info("{}:{}".format('F1_micro', metrics_total['F1_micro']))
+    logging.info("{}:{}".format('F1_weighted', metrics_total['F1_weighted']))
+
+    # save the precision, recall and F1 score to dataframe
+    df = pd.DataFrame(
+        columns=[
+            'precision_macro',
+            'precision_weighted',
+            'recall_macro',
+            'recall_weighted',
+            'F1_macro',
+            'F1_weighted',
+        ]
+    )
+    df.loc[0] = [
+        metrics_total['precision_macro'],
+        metrics_total['precision_weighted'],
+        metrics_total['recall_macro'],
+        metrics_total['recall_weighted'],
+        metrics_total['F1_macro'],
+        metrics_total['F1_weighted'],
+    ]
+    df.to_csv(os.path.join(args.data_path, 'result.csv'), index=False)
 
     return metrics_total['main']
 
 
 def test(args):
-
     # define tokenizer
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
 
     # load dataset
     if args.data_mode in ['bert-base-chinese']:
-        args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
+        args.user_num, args.item_num, args.class_num = pickle.load(
+            open(os.path.join(args.data_path, 'node_num.pkl'), 'rb')
+        )
         test_set = load_dataset_bert(args, tokenizer, evaluate=True, test=True)
     else:
         raise ValueError('Data Mode is Incorrect here!')
 
-    test_sampler = SequentialSampler(test_set) if args.local_rank == -1 else DistributedSampler(test_set)
-    test_loader = DataLoader(test_set, batch_size=args.test_batch_size, sampler=test_sampler)
+    test_sampler = (
+        SequentialSampler(test_set)
+        if args.local_rank == -1
+        else DistributedSampler(test_set)
+    )
+    test_loader = DataLoader(
+        test_set, batch_size=args.test_batch_size, sampler=test_sampler
+    )
     print('Dataset Loading Over!')
 
     # define model
@@ -264,14 +412,16 @@ def test(args):
     validate(args, model, test_loader)
     logging.info("test time:{}".format(time() - start_time))
 
+
 def get_node_emd(args):
-    
     # define tokenizer
     tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
 
     # load dataset
     if args.data_mode in ['bert-base-chinese']:
-        args.user_num, args.item_num, args.class_num = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
+        args.user_num, args.item_num, args.class_num = pickle.load(
+            open(os.path.join(args.data_path, 'node_num.pkl'), 'rb')
+        )
     else:
         raise ValueError('Data Mode is Incorrect here!')
 
@@ -288,4 +438,3 @@ def get_node_emd(args):
 
     # 保存 Tensor
     torch.save(model.bert.node_embedding.detach(), 'node_embedding.pt')
-

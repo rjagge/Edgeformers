@@ -3,11 +3,11 @@ import logging
 import argparse
 from pathlib import Path
 
-from src.run import train, test, infer
+from src.run import train, test, infer, get_test_embedding
 from src.utils import setuplogging, str2bool, set_seed
 
 parser = argparse.ArgumentParser(description='Study for Edge Text-Rich Networks.')
-parser.add_argument("--mode", type=str, default="train", choices=['train', 'test', 'infer'])
+parser.add_argument("--mode", type=str, default="train", choices=['train', 'test', 'infer','get_test_embedding'])
 parser.add_argument("--data_path", type=str, default="movie/")
 # parser.add_argument("--model_dir", type=str, default='ckpt/', choices=['ckpt/', 'ckpt-test/'])  # path to save
 parser.add_argument("--data_mode", default="text", type=str, choices=['text'])
@@ -99,3 +99,9 @@ if __name__ == "__main__":
         ################## You should use single GPU for infering. ####################
         assert args.local_rank == -1
         infer(args)
+
+    if args.mode == 'get_test_embedding':
+        print('-------------get_test_embedding--------------')
+        ################## You should use single GPU for get_test_embedding. ####################
+        assert args.local_rank == -1
+        get_test_embedding(args)

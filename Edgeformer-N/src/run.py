@@ -24,7 +24,7 @@ from transformers import BertModel
 def cleanup():
     dist.destroy_process_group()
 
-def load_bert(args):
+def load_model(args):
     config = BertConfig.from_pretrained(args.model_name_or_path, output_hidden_states=True)
     config.heter_embed_size = args.heter_embed_size
     config.edge_type = args.edge_type
@@ -84,7 +84,7 @@ def train(args):
     print(f'[Process:{args.local_rank}] Dataset Loading Over!')
 
     # define model
-    model = load_bert(args)
+    model = load_model(args)
     if args.local_rank in [-1, 0]:
         logging.info('loading model: {}'.format(args.model_type))
     model.to(args.device)
@@ -242,7 +242,7 @@ def test(args):
     print('Dataset Loading Over!')
 
     # define model
-    model = load_bert(args)
+    model = load_model(args)
     logging.info('loading model: {}'.format(args.model_type))
     model = model.cuda()
 
@@ -288,7 +288,7 @@ def infer(args):
     args.device = device
 
     # define model
-    model = load_bert(args)
+    model = load_model(args)
     model.to(args.device)
     model.eval()
 
@@ -305,12 +305,7 @@ def infer(args):
         # put data into GPU
         
         if args.enable_gpu:
-            if args.data_path in ['stackoverflow/']:
-                batch = [b.cuda() for i, b in enumerate(batch) if i< (len(batch) // 2)]
-            elif args.data_path in ['movie/', 'crime_book/', 'Apps/']:
-                batch = [b.cuda() for i, b in enumerate(batch) if i>= (len(batch) // 2)]
-            else:
-                raise ValueError('Error here!')
+            batch = [b.cuda() for i, b in enumerate(batch) if i< (len(batch) // 2)]
 
         # calculate embedding
         embedding = model.infer(*batch)
@@ -318,3 +313,90 @@ def infer(args):
     assert train_embedding.shape[0] == len(train_set)
 
     np.save(os.path.join(args.data_path, f'{args.model_type}.npy'), train_embedding.cpu().numpy())
+
+
+@torch.no_grad()
+def get_test_embedding(args):
+    # 为了得到test中每一个q和k的embedding，最后得到一个dict，key是q/k，value是q/k的embedding
+    # Load data
+    # define tokenizer 
+    tokenizer = BertTokenizerFast.from_pretrained("bert-base-chinese")
+    # load sampling statistics
+    args.user_pos_neighbour, args.user_neg_neighbour, args.item_pos_neighbour, args.item_neg_neighbour = pickle.load(open(os.path.join(args.data_path,'neighbor_sampling.pkl'),'rb'))
+
+    # load dataset
+    if args.data_mode in ['text']:
+        args.user_num, args.item_num, args.edge_type = pickle.load(open(os.path.join(args.data_path, 'node_num.pkl'),'rb'))
+        test_set = load_dataset_text(args, tokenizer, evaluate=False, test=True)
+    else:
+        raise ValueError('Data Mode is Incorrect here!')
+    print(f'test_set length:{len(test_set)}')
+
+    # define dataloader
+    test_sampler = SequentialSampler(test_set) if args.local_rank == -1 else DistributedSampler(test_set)
+
+    test_loader = DataLoader(test_set, batch_size=args.test_batch_size, sampler=test_sampler)
+    print(f'[Process:{args.local_rank}] Dataset Loading Over!')
+
+    device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
+    # config.n_gpu = torch.cuda.device_count()
+    args.n_gpu = 1
+    args.device = device
+
+    # define model
+    model = load_model(args)
+    model.to(args.device)
+    model.eval()
+
+    assert args.load == True
+
+    if args.load:
+        model.load_state_dict(torch.load(args.load_ckpt_name, map_location="cpu"))
+        logging.info('load ckpt:{}'.format(args.load_ckpt_name))
+
+    # obtain embedding on train set for query node
+    test_embedding = torch.FloatTensor().to(args.device)
+    test_loader_iterator = tqdm(test_loader, desc="Iteration")
+
+    emb_dict_q = {}
+    emb_dict_k = {}
+    qk_relation = {}
+    for step, batch in enumerate(test_loader_iterator):
+        # put data into GPU
+        
+        if args.enable_gpu:
+            batch_q = [b.cuda() for i, b in enumerate(batch) if i< (len(batch) // 2)]
+            batch_k = [b.cuda() for i, b in enumerate(batch) if i>= (len(batch) // 2)]
+
+        # # calculate embedding
+        # embedding_q = model.infer(*batch_q)
+        # embedding_k = model.infer(*batch_k)
+        # test_embedding_q = torch.cat((test_embedding, embedding_q), dim=0)
+        # test_embedding_k = torch.cat((test_embedding, embedding_k), dim=0)
+
+        # # 将q和k的embedding放到一个dict中
+        # for i in range(len(test_embedding_q)):
+        #     q = int(batch_q[0][i])
+        #     emb_dict_q[q] = test_embedding_q[i]
+        # for i in range(len(test_embedding_k)):
+        #     emb_dict_k[int(batch_k[0][i])] = test_embedding_k[i]
+        # 将q和k的关系放到一个dict中
+        for i in range(len(batch[0])):
+            q = int(batch_q[0][i])
+            k = int(batch_k[0][i])
+            if q not in qk_relation:
+                qk_relation[q] = [k]
+            else:
+                new_list = qk_relation[q]
+                new_list.append(k)
+                qk_relation[q] = new_list
+
+    # save emb_dict_q, emb_dict_k, qk_relation
+    # with open(os.path.join(args.data_path, f'{args.model_type}_emb_dict_q.pkl'), 'wb') as f:
+    #     pickle.dump(emb_dict_q, f)
+    # with open(os.path.join(args.data_path, f'{args.model_type}_emb_dict_k.pkl'), 'wb') as f:
+    #     pickle.dump(emb_dict_k, f)
+    with open(os.path.join(args.data_path, f'{args.model_type}_qk_relation.pkl'), 'wb') as f:
+        pickle.dump(qk_relation, f)
+    # np.save(os.path.join(args.data_path, f'{args.model_type}_embedding.npy'), test_embedding.cpu().numpy())

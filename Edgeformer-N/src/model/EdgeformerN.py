@@ -322,7 +322,6 @@ class EdgeFormersForNeighborPredict(BertPreTrainedModel):
                                         query_neighbor_ids_batch, query_neighbor_mask_batch)
         key_embeddings = self.infer(key_ids_batch,token_key_edges_batch, attention_key_edges_batch, 
                                         key_neighbor_ids_batch, key_neighbor_mask_batch)
-
         score = torch.matmul(query_embeddings, key_embeddings.transpose(0, 1))
         labels = torch.arange(start=0, end=score.shape[0], dtype=torch.long, device=score.device)
         loss = F.cross_entropy(score, labels)

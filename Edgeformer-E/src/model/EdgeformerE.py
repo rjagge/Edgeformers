@@ -99,15 +99,14 @@ class EdgeFormersE(BertPreTrainedModel):
                 with torch.no_grad():
                     self.node_to_text_transform.weight.copy_(checkpoint['linear.weight'])
                     self.node_to_text_transform.bias.copy_(checkpoint['linear.bias'])
-            # 这个模型暂时用来当作bert+node的baseline
-            # 使用这个模型时需要设置 pretrain_embed == True and pretrain_mode == 'MF' and pretrain_dir = '/root/collaborator_rec/baselines/'
             elif pretrain_mode == 'MF':
+                # 重新思考
+                # 这个模型暂时用来当作bert+node的baseline
+                # 使用这个模型时需要设置 pretrain_embed == True and pretrain_mode == 'MF' and pretrain_dir = '/root/collaborator_rec/baselines/'
                 # checkpoint = torch.load(os.path.join(pretrain_dir, f'MF_{heter_embed_size}.pt'), map_location='cpu')
                 # self.node_embedding = nn.Parameter(checkpoint['node_embedding'])
-                checkpoint = torch.load(os.path.join(pretrain_dir, f'node_embedding.pt'),map_location='cpu')
-                self.node_embedding = nn.Parameter(checkpoint)
-                # 固定这个node_embedding的参数
-                self.node_embedding.requires_grad = False
+                checkpoint = torch.load(os.path.join(pretrain_dir, f'MF_{heter_embed_size}.pt'), map_location='cpu')
+                self.node_embedding = nn.Parameter(checkpoint['node_embedding'])
                 self.node_to_text_transform = nn.Linear(self.heter_embed_size, self.hidden_size)
             else:
                 raise ValueError('Wrong pretrain mode!')
